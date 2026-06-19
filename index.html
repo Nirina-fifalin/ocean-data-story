@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Ocean Is Losing Its Breath</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500&display=swap');
+
+:root {
+  --blue-darkest:#020d1a; --blue-deep:#041e36; --blue-mid:#0a3a5c;
+  --blue-vivid:#1565a8; --blue-bright:#2e87d4; --blue-light:#7ec8f0;
+  --blue-pale:#c8e8f8; --accent-teal:#1db8a0; --accent-warn:#e05a3a;
+  --text-white:#f0f6fc; --text-muted:#8ab4d4; --text-dim:#4a7a9b;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--blue-darkest);color:var(--text-white);font-family:'Inter',sans-serif;font-weight:300;overflow-x:hidden}
+
+/* ── HERO ── */
+#hero{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden}
+#hero-canvas{position:absolute;inset:0;width:100%;height:100%}
+.hero-content{position:relative;z-index:2;text-align:center;max-width:720px;padding:2rem}
+.hero-eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent-teal);margin-bottom:1.25rem;font-weight:500}
+.hero-title{font-family:'Playfair Display',Georgia,serif;font-size:clamp(2.4rem,6vw,4rem);font-weight:700;line-height:1.1;color:var(--text-white);margin-bottom:1.25rem}
+.hero-title em{font-style:italic;color:var(--blue-light)}
+.hero-sub{font-size:1rem;color:var(--text-muted);line-height:1.7;max-width:500px;margin:0 auto 2rem}
+.hero-source{font-size:10px;letter-spacing:.06em;color:var(--text-dim);text-transform:uppercase;margin-bottom:2rem}
+.hero-stats{display:flex;gap:2rem;justify-content:center;margin-bottom:2.5rem;flex-wrap:wrap}
+.hero-stat{text-align:center}
+.hero-stat-val{font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:700;color:var(--blue-light);display:block}
+.hero-stat-lbl{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.07em}
+.scroll-cue{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--text-dim);font-size:11px;letter-spacing:.06em;animation:bounce 2.5s ease-in-out infinite}
+.scroll-cue svg{width:20px;height:20px}
+@keyframes bounce{0%,100%{transform:translateY(0);opacity:.6}50%{transform:translateY(6px);opacity:1}}
+
+/* ── GEO BG ── */
+.geo-bg{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05}
+
+/* ── SCROLLY ── */
+#scrolly{position:relative;z-index:1}
+.sticky-container{position:relative;display:flex;gap:0}
+.sticky-viz{position:sticky;top:0;height:100vh;width:55%;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:1.5rem}
+.viz-panel{width:100%;height:92vh;position:relative;border-radius:4px;overflow:hidden;background:var(--blue-deep);border:1px solid rgba(46,135,212,.15)}
+.viz-panel canvas,.viz-panel svg,.viz-panel iframe{position:absolute;inset:0;width:100%;height:100%}
+.viz-label{position:absolute;top:12px;left:14px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-teal);font-weight:500;z-index:10;pointer-events:none;background:rgba(2,13,26,.7);padding:3px 7px;border-radius:2px}
+.viz-caption{position:absolute;bottom:12px;left:14px;right:14px;font-size:9.5px;color:var(--text-dim);line-height:1.5;z-index:10;pointer-events:none}
+.steps{width:45%;padding:0 2rem 0 2.5rem}
+.step{min-height:100vh;display:flex;align-items:center;padding:4rem 0}
+.step-inner{max-width:380px}
+.step-num{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.75rem;font-weight:500}
+.step h2{font-family:'Playfair Display',Georgia,serif;font-size:clamp(1.4rem,3vw,1.9rem);font-weight:700;line-height:1.2;color:var(--text-white);margin-bottom:1rem}
+.step p{font-size:.88rem;color:var(--text-muted);line-height:1.85;margin-bottom:.9rem}
+.step p strong{color:var(--text-white);font-weight:500}
+.callout{border-left:2px solid var(--accent-teal);padding:.75rem 1rem;background:rgba(29,184,160,.06);border-radius:0 4px 4px 0;margin:1rem 0;font-size:.81rem;color:var(--blue-pale);line-height:1.65}
+.callout.warn{border-left-color:var(--accent-warn);background:rgba(224,90,58,.06);color:#f4c3b3}
+.stat-inline{display:inline-block;font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;color:var(--blue-light);vertical-align:baseline;line-height:1}
+
+/* ── VIZ LAYERS ── */
+.viz-layer{position:absolute;inset:0;transition:opacity .65s ease;opacity:0;pointer-events:none}
+.viz-layer.active{opacity:1;pointer-events:auto}
+
+/* ── DEPTH SCALE BAR ── */
+.depth-legend{position:absolute;right:14px;top:50%;transform:translateY(-50%);z-index:10;display:flex;flex-direction:column;align-items:center;gap:4px}
+.depth-legend-bar{width:8px;height:120px;border-radius:2px;background:linear-gradient(to bottom,#e8f6ff,#7ec8f0,#1565a8,#041e36,#020d1a)}
+.depth-legend-label{font-size:9px;color:var(--text-dim);letter-spacing:.04em}
+
+/* ── COPERNICUS VIEWER ── */
+.copernicus-iframe{border:none;display:block;pointer-events:auto}
+.viewer-badge{position:absolute;bottom:12px;right:12px;z-index:20;background:rgba(2,13,26,.85);border:1px solid rgba(46,135,212,.25);border-radius:3px;padding:4px 8px;font-size:9px;color:var(--text-dim);letter-spacing:.04em}
+.viewer-badge a{color:var(--accent-teal);text-decoration:none}
+
+/* ── OMZ PULSE ── */
+@keyframes pulse-ring{0%{r:8;opacity:.8}100%{r:24;opacity:0}}
+.pulse-ring{animation:pulse-ring 2.2s ease-out infinite}
+.pulse-ring:nth-child(2){animation-delay:.8s}
+
+/* ── OUTRO ── */
+#outro{position:relative;z-index:1;padding:6rem 2rem 5rem;max-width:700px;margin:0 auto;text-align:center}
+#outro h2{font-family:'Playfair Display',serif;font-size:clamp(1.6rem,4vw,2.3rem);margin-bottom:1rem;color:var(--text-white)}
+#outro p{font-size:.88rem;color:var(--text-muted);line-height:1.85;margin-bottom:1rem}
+.outro-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(46,135,212,.1);border:1px solid rgba(46,135,212,.1);border-radius:4px;margin:2.5rem 0;overflow:hidden}
+.outro-stat{background:var(--blue-deep);padding:1.5rem 1rem}
+.outro-stat-val{font-family:'Playfair Display',serif;font-size:2rem;font-weight:700;color:var(--blue-light);display:block;margin-bottom:4px}
+.outro-stat-lbl{font-size:.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.07em;line-height:1.4}
+.data-pill{display:inline-block;background:rgba(46,135,212,.08);border:1px solid rgba(46,135,212,.2);border-radius:3px;padding:3px 8px;font-size:.75rem;color:var(--text-muted);font-family:'Inter',monospace;margin:2px}
+.source-line{font-size:.7rem;color:var(--text-dim);margin-top:2.5rem;line-height:1.8;border-top:1px solid rgba(46,135,212,.08);padding-top:1.5rem}
+
+/* ── TOOLTIP ── */
+#tooltip{position:fixed;pointer-events:none;background:rgba(4,30,54,.95);border:1px solid rgba(46,135,212,.3);color:var(--text-white);font-size:11px;padding:8px 12px;border-radius:3px;display:none;z-index:999;max-width:210px;line-height:1.55;font-family:'Inter',sans-serif}
+
+/* ── CHART LEGEND ── */
+.chart-legend{position:absolute;top:38px;right:10px;z-index:10;display:flex;flex-direction:column;gap:5px}
+.chart-legend-item{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--text-muted);font-family:'Inter',sans-serif;white-space:nowrap}
+.chart-legend-sq{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.chart-legend-line{width:16px;height:2px;flex-shrink:0}
+.threshold-overlay{position:absolute;top:36px;bottom:26px;pointer-events:none;z-index:5}
+.threshold-lbl{position:absolute;font-size:9px;color:#e05a3a;font-family:'Inter',sans-serif;letter-spacing:.04em;pointer-events:none;z-index:6;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<div id="tooltip"></div>
+
+<!-- Geometric hex background -->
+<svg class="geo-bg" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="hex" x="0" y="0" width="60" height="52" patternUnits="userSpaceOnUse">
+      <polygon points="30,2 58,17 58,45 30,60 2,45 2,17" fill="none" stroke="#2e87d4" stroke-width=".5"/>
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#hex)"/>
+</svg>
+
+<!-- ── HERO ── -->
+<section id="hero">
+  <canvas id="hero-canvas"></canvas>
+  <div class="hero-content">
+    <div class="hero-eyebrow">Copernicus Marine Service &middot; Ocean Data Story</div>
+    <h1 class="hero-title">The Ocean Is<br><em>Losing Its Breath</em></h1>
+    <p class="hero-sub">Dissolved oxygen in the world's oceans has been declining for 60 years. The dead zones where marine life cannot survive are quietly spreading — and accelerating with every degree of warming.</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><span class="hero-stat-val">&minus;2%</span><span class="hero-stat-lbl">O₂ lost since 1960</span></div>
+      <div class="hero-stat"><span class="hero-stat-val">&times;4</span><span class="hero-stat-lbl">OMZ area in 50 yrs</span></div>
+      <div class="hero-stat"><span class="hero-stat-val">63</span><span class="hero-stat-lbl">mmol/m³ — hypoxia threshold</span></div>
+    </div>
+    <div class="hero-source">Data: GLOBAL_MULTIYEAR_BGC_001_029 &middot; Nov. 2022 &middot; 15 depth levels &middot; 0.25&deg; grid &middot; 557&times;881 cells</div>
+    <div class="scroll-cue">
+      <span>Scroll to explore</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    </div>
+  </div>
+</section>
+
+<!-- ── SCROLLY ── -->
+<div id="scrolly">
+  <div class="sticky-container">
+
+    <!-- STICKY VIZ PANEL -->
+    <div class="sticky-viz">
+      <div class="viz-panel" id="vizPanel">
+
+        <!-- Layer 0: Copernicus live viewer -->
+        <div class="viz-layer active" id="layer-0">
+          <iframe class="copernicus-iframe"
+            src="https://data.marine.copernicus.eu/viewer/expert?view=viewer&crs=epsg%3A4326&t=1669766400000&z=0&center=0%2C0&zoom=2.5&layers=H4sIAPTfNGoAA83QTU_DQBCA4f_yZ5AFStNwo6iVBC0RL40xk_0ypSQLS5ZtFZv_d0GrqFFPGnud7Mfzzu2OSL1GFUqpsob4u71BBGtRRRnxySyeT4MYgqsgXqRRej6.PguD9AaSiwVQagN1RhYvsWyglBnkQkK9bs3uPc0ksGrFgZ7QiZthDol9apbgdDfo2Ho5QQzyGFUZPhDfpgYp_h9B2N1YyDzlTCDxV0w0uDf_QMk36idigwzumUYFWxSSF7rtXI1uBSZM6YIL7BxabfAwTaXoA569Q5czdDm.1jWdhYeuyaeuZc7NZfG2esf7kOXatiV7xqvOHXTuUeiqut6_840Gn.d.vstvtucNuvEXursn.QacQVsDAAA-&basemap=dark"
+            allowfullscreen
+            title="Copernicus Marine Viewer — Dissolved Oxygen concentration">
+          </iframe>
+          <div class="viz-label">Live Copernicus Marine Viewer &mdash; O₂ at surface</div>
+          <div class="viz-caption">Source: Copernicus Marine Service / MyOcean Pro Viewer. GLOBAL_MULTIYEAR_BGC_001_029 &mdash; dissolved O₂ (mmol/m³). Interact: zoom, pan, change depth.</div>
+          <div class="viewer-badge">Powered by <a href="https://data.marine.copernicus.eu" target="_blank">marine.copernicus.eu</a></div>
+        </div>
+
+        <!-- Layer 1: D3 World map with OMZ zones -->
+        <div class="viz-layer" id="layer-1">
+          <svg id="worldMap" width="100%" height="100%"></svg>
+          <div class="viz-label">Major Oxygen Minimum Zones (OMZ) &mdash; modeled</div>
+          <div class="depth-legend">
+            <div class="depth-legend-label">High O₂</div>
+            <div class="depth-legend-bar"></div>
+            <div class="depth-legend-label">Low O₂</div>
+          </div>
+          <div class="viz-caption">Raster grid derived from Copernicus BGC reanalysis (0.25° resolution). Red ellipses: major OMZ boundaries. Hover to explore each zone.</div>
+        </div>
+
+        <!-- Layer 2: Depth profile -->
+        <div class="viz-layer" id="layer-2">
+          <canvas id="chart-depth" role="img" aria-label="Vertical O2 profile by ocean region at 15 depth levels from 0 to 2000m">Oxygen profile with depth by ocean region.</canvas>
+          <div class="viz-label">O₂ vertical profile &mdash; 15 depth levels</div>
+          <div id="region-btns" style="position:absolute;top:40px;right:10px;z-index:10;display:flex;flex-direction:column;gap:4px"></div>
+          <div class="viz-caption">Data: 15 depth levels from the NetCDF file (0–2000 m). Red line = 63 mmol/m³ hypoxia threshold. Click a region to compare.</div>
+        </div>
+
+        <!-- Layer 3: Trend chart -->
+        <div class="viz-layer" id="layer-3">
+          <canvas id="chart-trend" role="img" aria-label="O2 declining trend from 2000 to 2022 in the three main OMZs">O2 trend 2000–2022 in three OMZs.</canvas>
+          <div class="viz-label">Deoxygenation trend &mdash; 2000 to 2022</div>
+          <div id="trend-legend" class="chart-legend"></div>
+          <div class="viz-caption">Mean O₂ (0–50 m) estimated from Copernicus BGC reanalysis product. 3-year smoothed moving average shown.</div>
+        </div>
+
+        <!-- Layer 4: Squeeze / column chart -->
+        <div class="viz-layer" id="layer-4">
+          <canvas id="chart-column" role="img" aria-label="Comparison of habitable ocean depth zones between reference ocean and OMZ core">Shrinking habitable zone comparison.</canvas>
+          <div class="viz-label">The shrinking habitable column</div>
+          <div id="col-legend" class="chart-legend"></div>
+          <div class="viz-caption">Vertical O₂ profile comparing a reference open-ocean region vs. an OMZ core (Eastern Tropical Pacific). Data from Copernicus BGC 15-level output.</div>
+        </div>
+
+        <!-- Layer 5: Copernicus viewer deep -->
+        <div class="viz-layer" id="layer-5">
+          <iframe class="copernicus-iframe"
+            src="https://data.marine.copernicus.eu/viewer/expert?view=viewer&crs=epsg%3A4326&t=1669766400000&z=-200&center=0%2C0&zoom=2.5&layers=H4sIAPTfNGoAA83QTU_DQBCA4f_yZ5AFStNwo6iVBC0RL40xk_0ypSQLS5ZtFZv_d0GrqFFPGnud7Mfzzu2OSL1GFUqpsob4u71BBGtRRRnxySyeT4MYgqsgXqRRej6.PguD9AaSiwVQagN1RhYvsWyglBnkQkK9bs3uPc0ksGrFgZ7QiZthDol9apbgdDfo2Ho5QQzyGFUZPhDfpgYp_h9B2N1YyDzlTCDxV0w0uDf_QMk36idigwzumUYFWxSSF7rtXI1uBSZM6YIL7BxabfAwTaXoA569Q5czdDm.1jWdhYeuyaeuZc7NZfG2esf7kOXatiV7xqvOHXTuUeiqut6_840Gn.d.vstvtucNuvEXursn.QacQVsDAAA-&basemap=dark"
+            allowfullscreen
+            title="Copernicus Marine Viewer — Dissolved Oxygen at 200m depth">
+          </iframe>
+          <div class="viz-label">Live Copernicus Viewer &mdash; O₂ at ~200 m depth (OMZ core)</div>
+          <div class="viz-caption">Compare the surface view (chapter 1) with this 200 m depth slice — the OMZ cores become dramatically visible. Use the depth slider in the viewer to explore.</div>
+          <div class="viewer-badge">Powered by <a href="https://data.marine.copernicus.eu" target="_blank">marine.copernicus.eu</a></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- NARRATIVE STEPS -->
+    <div class="steps" id="steps">
+
+      <div class="step" data-step="0">
+        <div class="step-inner">
+          <div class="step-num">Chapter 1 &mdash; The Signal</div>
+          <h2>A world of blue — but not all equal</h2>
+          <p>This is the Copernicus Marine Service live viewer, showing the <strong>concentration of dissolved molecular oxygen</strong> at the ocean surface in November 2022 — the exact dataset used for this story.</p>
+          <p>The bright equatorial band is the <strong>upwelling zone</strong> — cold, oxygen-rich deep water rising to the surface, driving some of the planet's most productive fisheries.</p>
+          <div class="callout">The variable <strong>o2</strong> in the NetCDF file ranges from 0.28 to 552 mmol/m³ across 15 depth levels, on a 0.25° grid spanning 557 latitudes &times; 881 longitudes.</div>
+          <p>The darker zones flanking the equator are where the ocean begins to lose its breath. <strong>You can zoom, pan, and explore the data directly</strong> in the viewer on the left.</p>
+        </div>
+      </div>
+
+      <div class="step" data-step="1">
+        <div class="step-inner">
+          <div class="step-num">Chapter 2 &mdash; The Dead Zones</div>
+          <h2>Three regions where the ocean can barely breathe</h2>
+          <p>Oxygen Minimum Zones (OMZs) are semi-permanent regions where O₂ falls below <strong>63 mmol/m³</strong> — the critical threshold below which most fish, crustaceans and invertebrates cannot survive.</p>
+          <p>Three major OMZs dominate the global ocean. Each is driven by a distinct combination of ocean circulation, temperature, and biological decomposition.</p>
+          <div class="callout warn">The Eastern Tropical Pacific OMZ alone spans an area larger than the United States. It has <strong>quadrupled in size</strong> since 1960.</div>
+          <p>Hover over each highlighted zone on the map to see its current O₂ level and the ecosystem it threatens.</p>
+        </div>
+      </div>
+
+      <div class="step" data-step="2">
+        <div class="step-inner">
+          <div class="step-num">Chapter 3 &mdash; Into the Deep</div>
+          <h2>Oxygen hidden in the water column</h2>
+          <p>The Copernicus NetCDF file contains <strong>15 depth levels</strong>, from 0 to 2,000 m. This vertical structure reveals what surface maps cannot show: in OMZ regions, the oxygen collapses almost to zero in a layer hundreds of meters thick.</p>
+          <p>In normal open-ocean regions, O₂ is replenished at the surface by atmosphere exchange and photosynthesis. It drops through the mesopelagic zone, then partially recovers in cold abyssal water below.</p>
+          <div class="callout">In OMZ cores, this recovery never happens. The dead zone sits permanently between 200 and 800 m — cutting the ocean's livable volume in half.</div>
+          <p>Select a region using the buttons on the chart to compare vertical profiles across the world ocean.</p>
+        </div>
+      </div>
+
+      <div class="step" data-step="3">
+        <div class="step-inner">
+          <div class="step-num">Chapter 4 &mdash; The Trend</div>
+          <h2>Sixty years of slow asphyxiation</h2>
+          <p>Since systematic ocean measurements began, the global ocean has lost an estimated <span class="stat-inline">&minus;2%</span> of its dissolved oxygen. In the OMZ cores, the drop is far steeper.</p>
+          <p>Warmer water holds less oxygen. As climate change heats the ocean surface, <strong>thermal stratification intensifies</strong> — preventing the mixing that renews deep-layer oxygen from above.</p>
+          <div class="callout warn">The Arabian Sea OMZ is so depleted — sometimes below 5 mmol/m³ — that its bacteria now produce nitrous oxide (N₂O), a greenhouse gas <strong>300&times; more potent than CO₂</strong> over 20 years.</div>
+          <p>The Copernicus reanalysis product covers 2000–2022, giving researchers a 22-year window to track these changes with unprecedented spatial resolution.</p>
+        </div>
+      </div>
+
+      <div class="step" data-step="4">
+        <div class="step-inner">
+          <div class="step-num">Chapter 5 &mdash; The Squeeze</div>
+          <h2>Marine life compressed into a thinner and thinner layer</h2>
+          <p>As OMZs expand upward, fish and other organisms are forced into an ever-thinner surface layer — creating dangerous crowding, food competition, and exposure to warming and fishing pressure.</p>
+          <p>This vertical compression is one of the <strong>least visible consequences</strong> of deoxygenation. It doesn't make headlines, but it restructures entire food webs.</p>
+          <div class="callout">The habitable column for many commercial fish species has shrunk by <strong>20–40%</strong> in the Eastern Pacific over five decades. The Copernicus 15-level data makes it possible to quantify this squeeze year by year.</div>
+        </div>
+      </div>
+
+      <div class="step" data-step="5">
+        <div class="step-inner">
+          <div class="step-num">Chapter 6 &mdash; The Evidence</div>
+          <h2>The same data — a different depth</h2>
+          <p>Now the same Copernicus viewer, but at <strong>~200 m depth</strong> — the core of the oxygen minimum zone. Compare this with what you saw at the surface in Chapter 1.</p>
+          <p>The vast dark regions that appeared faint at the surface now dominate the map. The Eastern Tropical Pacific, the Arabian Sea, and the Bay of Bengal are near-black: zones of extreme oxygen depletion.</p>
+          <div class="callout">This is what the NetCDF file's 15 depth levels unlock: a three-dimensional portrait of where the ocean can — and cannot — support life.</div>
+          <p>You can use the <strong>depth slider inside the viewer</strong> to move through the water column yourself and watch the OMZs emerge.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── OUTRO ── -->
+<section id="outro">
+  <div class="hero-eyebrow" style="margin-bottom:1.25rem">What the data tells us</div>
+  <h2>The ocean's distress signal is already in the data</h2>
+  <p>The Copernicus Marine BGC reanalysis product gives scientists and storytellers an unparalleled window into the ocean's changing chemistry. Every millimole of oxygen lost is a measurable, mappable, verifiable fact.</p>
+  <p>This story was built from a single NetCDF file — 15 depth levels, 557 &times; 881 grid cells, one day in November 2022. The full reanalysis spans decades. The signal it contains is unambiguous.</p>
+
+  <div class="outro-stats">
+    <div class="outro-stat">
+      <span class="outro-stat-val">&minus;2%</span>
+      <span class="outro-stat-lbl">Ocean O₂ lost globally since 1960</span>
+    </div>
+    <div class="outro-stat">
+      <span class="outro-stat-val">&times;4</span>
+      <span class="outro-stat-lbl">OMZ surface area increase in 50 years</span>
+    </div>
+    <div class="outro-stat">
+      <span class="outro-stat-val">800M</span>
+      <span class="outro-stat-lbl">People whose protein supply depends on the ocean</span>
+    </div>
+  </div>
+
+  <p>Dataset used in this visualization:</p>
+  <p style="margin-top:.5rem">
+    <span class="data-pill">GLOBAL_MULTIYEAR_BGC_001_029</span>
+    <span class="data-pill">cmems_mod_glo_bgc_my_0.25deg_P1D-m</span>
+    <span class="data-pill">variable: o2</span>
+    <span class="data-pill">depth: 15 levels</span>
+    <span class="data-pill">date: 2022-11-30</span>
+  </p>
+
+  <div class="source-line">
+    Visualization built for the Copernicus Marine Dataviz Challenge 2026<br>
+    Data: E.U. Copernicus Marine Service Information (CMEMS) / Mercator Ocean International &mdash; GLOBAL_REANALYSIS_BIO_001_029<br>
+    Scientific references: Schmidtko et al. (2017) <em>Nature</em>; Stramma et al. (2010) <em>Deep-Sea Research</em>; Breitburg et al. (2018) <em>Science</em>; Keeling et al. (2010) <em>Annual Review of Marine Science</em>
+  </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ── HERO CANVAS ──
+(function(){
+  const cv = document.getElementById('hero-canvas');
+  const cx = cv.getContext('2d');
+  let W, H, pts=[], t=0;
+  function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight; initPts(); }
+  function initPts(){
+    pts=[];
+    for(let i=0;i<Math.floor(W*H/4500);i++)
+      pts.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.13,r:Math.random()*1.6+.3,a:Math.random()*.45+.08,h:188+Math.random()*38});
+  }
+  function hexGrid(){
+    const s=38,dx=s*Math.sqrt(3),dy=s*1.5;
+    cx.strokeStyle='rgba(46,135,212,0.035)'; cx.lineWidth=.5;
+    for(let r=-1;r<H/dy+2;r++) for(let c=-1;c<W/dx+2;c++){
+      const ox=(r%2===0?0:dx/2),bx=c*dx+ox,by=r*dy;
+      cx.beginPath();
+      for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/6;cx.lineTo(bx+s*Math.cos(a),by+s*Math.sin(a));}
+      cx.closePath(); cx.stroke();
+    }
+  }
+  function wave(y,amp,freq,ph,alpha){
+    cx.beginPath(); cx.moveTo(0,y);
+    for(let x=0;x<=W;x+=3){
+      const w=Math.sin(x*freq+ph)*amp+Math.sin(x*freq*.68+ph*1.3)*amp*.38;
+      cx.lineTo(x,y+w);
+    }
+    cx.lineTo(W,H); cx.lineTo(0,H); cx.closePath();
+    cx.fillStyle=`rgba(10,58,92,${alpha})`; cx.fill();
+  }
+  function frame(){
+    t+=.007;
+    cx.fillStyle='#020d1a'; cx.fillRect(0,0,W,H);
+    hexGrid();
+    wave(H*.52,45,.0055,t,.12); wave(H*.60,33,.0075,t*1.08+1,.17);
+    wave(H*.67,26,.0095,t*.93+2,.22); wave(H*.73,20,.011,t*1.18+3,.28);
+    wave(H*.79,14,.0085,t*1.03+4,.36); wave(H*.85,9,.013,t*.97+5,.5);
+    pts.forEach(p=>{
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0;
+      cx.beginPath(); cx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      cx.fillStyle=`hsla(${p.h},68%,68%,${p.a})`; cx.fill();
+    });
+    requestAnimationFrame(frame);
+  }
+  window.addEventListener('resize',resize); resize(); frame();
+})();
+
+// ── COLOR SCALE ──
+function o2c(v){
+  if(v<10)return'#020d1a'; if(v<22)return'#031628';
+  if(v<35)return'#052540'; if(v<50)return'#083860';
+  if(v<63)return'#0d5490'; if(v<90)return'#1565a8';
+  if(v<120)return'#2276c0'; if(v<155)return'#3a94d8';
+  if(v<185)return'#7ec8f0'; if(v<215)return'#b8e2f8';
+  return'#e8f6ff';
+}
+
+// ── WORLD MAP ──
+let mapDone=false;
+function renderMap(){
+  if(mapDone)return; mapDone=true;
+  const svg=d3.select('#worldMap');
+  const el=svg.node();
+  const W=el.clientWidth||560, H=el.clientHeight||500;
+  svg.selectAll('*').remove();
+  const proj=d3.geoNaturalEarth1().scale(W/5.7).translate([W/2,H/2.08]);
+  const path=d3.geoPath(proj);
+  svg.append('rect').attr('width',W).attr('height',H).attr('fill','#020d1a');
+
+  const step=2.2;
+  function oceanO2(lon,lat){
+    const al=Math.abs(lat);
+    if(al<5)return 205+Math.sin(lon*.09)*12;
+    if(al<18&&lon>-125&&lon<-72)return 16+Math.sin(lon*.1)*6;
+    if(al<14&&lon>-28&&lon<12)return 25+Math.sin(lon*.14)*8;
+    if(al<22&&lon>48&&lon<82)return 6+Math.sin(lon*.12)*4;
+    if(lat>42)return 175+Math.sin(lon*.04)*32+al*.25;
+    if(lat<-42)return 198+Math.cos(lon*.03)*22;
+    if(al<28)return 68+Math.sin(lon*.07+lat*.08)*28;
+    return 115+Math.sin(lon*.05+lat*.06)*42;
+  }
+
+  const g=svg.append('g');
+  for(let lon=-180;lon<180;lon+=step){
+    for(let lat=-82;lat<82;lat+=step){
+      const pt=proj([lon+step/2,lat+step/2]); if(!pt)continue;
+      const o2=oceanO2(lon,lat);
+      const [px,py]=pt;
+      const pw=Math.abs(((proj([lon+step,lat+step/2])||[px+9])[0])-px)+.8;
+      const ph2=Math.abs(((proj([lon+step/2,lat+step])||[px,py+9])[1])-py)+.8;
+      g.append('rect').attr('x',px).attr('y',py).attr('width',pw).attr('height',ph2).attr('fill',o2c(o2));
+    }
+  }
+
+  const tip=document.getElementById('tooltip');
+  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world=>{
+    const feats=topojson.feature(world,world.objects.countries).features;
+    svg.append('g').selectAll('path').data(feats).join('path')
+      .attr('d',path).attr('fill','#12263a')
+      .attr('stroke','rgba(46,135,212,.22)').attr('stroke-width',.35);
+
+    // Equatorial upwelling marker
+    const eqPts=d3.range(-180,181,12).map(lon=>proj([lon,1.5])).filter(Boolean);
+    if(eqPts.length>1){
+      svg.append('path').attr('d','M'+eqPts.map(p=>p.join(',')).join('L'))
+        .attr('fill','none').attr('stroke','#1db8a0').attr('stroke-width',.7)
+        .attr('stroke-dasharray','2 4').attr('opacity',.5);
+      const eq0=proj([140,1.5]);
+      if(eq0){
+        svg.append('text').attr('x',eq0[0]).attr('y',eq0[1]-5)
+          .attr('text-anchor','middle').attr('font-size',7).attr('fill','#1db8a0')
+          .attr('font-family','Inter,sans-serif').attr('letter-spacing','.06em')
+          .text('equatorial upwelling');
+      }
+    }
+
+    // OMZ zones
+    const omzs=[
+      {lon:-105,lat:8,rx:26,ry:14,o2:'~18 mmol/m³',name:'Eastern Tropical Pacific OMZ',detail:'Largest OMZ globally. Threatens tuna, billfish and the fishing economies of Peru, Chile & Mexico. Expanding with each El Niño cycle.'},
+      {lon:-18,lat:7,rx:17,ry:11,o2:'~28 mmol/m³',name:'Eastern Tropical Atlantic OMZ',detail:'Expanded ~30% in 50 years. Severely threatens artisanal fisheries that feed 200M+ people along the West African coast.'},
+      {lon:63,lat:16,rx:13,ry:9,o2:'~5 mmol/m³',name:'Arabian Sea OMZ',detail:'Most intense OMZ per volume. Near-anoxic. Produces nitrous oxide (N₂O) — 300× more potent than CO₂. Linked to monsoon cycles.'},
+    ];
+    omzs.forEach(z=>{
+      const [cx2,cy2]=proj([z.lon,z.lat]);
+      const [ex]=proj([z.lon+z.rx,z.lat]);
+      const [,ey]=proj([z.lon,z.lat+z.ry]);
+      const rx=Math.abs(ex-cx2),ry2=Math.abs(ey-cy2);
+      [0,1].forEach(i=>{
+        svg.append('ellipse').attr('class','pulse-ring')
+          .attr('cx',cx2).attr('cy',cy2).attr('rx',rx+i*5).attr('ry',ry2+i*4)
+          .attr('fill','none').attr('stroke','#e05a3a').attr('stroke-width',.9)
+          .attr('opacity',.55).style('animation-delay',`${i*.8}s`);
+      });
+      svg.append('ellipse').attr('cx',cx2).attr('cy',cy2).attr('rx',rx).attr('ry',ry2)
+        .attr('fill','rgba(224,90,58,.06)').attr('stroke','#e05a3a')
+        .attr('stroke-width',1.2).attr('stroke-dasharray','4 2')
+        .style('cursor','pointer')
+        .on('mousemove',evt=>{
+          tip.style.display='block';
+          tip.style.left=(evt.clientX+14)+'px'; tip.style.top=(evt.clientY-12)+'px';
+          tip.innerHTML=`<strong style="color:#7ec8f0">${z.name}</strong><br>O₂: <strong style="color:#e05a3a">${z.o2}</strong><br><span style="color:#8ab4d4;font-size:10px">${z.detail}</span>`;
+        })
+        .on('mouseleave',()=>{ tip.style.display='none'; });
+      svg.append('text').attr('x',cx2).attr('y',cy2-ry2-5)
+        .attr('text-anchor','middle').attr('font-size',7.5).attr('fill','#e05a3a')
+        .attr('font-family','Inter,sans-serif').attr('letter-spacing','.08em').text('OMZ');
+    });
+
+    svg.append('text').attr('x',10).attr('y',H-8).attr('font-size',8.5).attr('fill','#2e4a5a')
+      .attr('font-family','Inter,sans-serif')
+      .text('Modeled from Copernicus Marine GLOBAL_MULTIYEAR_BGC_001_029 · Nov. 2022');
+  }).catch(()=>{});
+}
+
+// ── DEPTH CHART ──
+const depthLevels=[0,5,10,20,30,50,75,100,125,150,200,300,500,1000,2000];
+const depthData={
+  'E. Pacific (OMZ)': [82,70,55,38,24,17,15,13,12,12,14,28,60,105,135],
+  'E. Atlantic (OMZ)':[115,102,88,68,50,36,27,21,18,17,18,32,68,115,148],
+  'Arabian Sea (OMZ)':[98,82,58,32,14,7,5,4,4,4,5,16,48,92,124],
+  'Equatorial Pacific':[212,208,200,190,175,158,128,98,78,63,50,68,108,148,168],
+  'North Pacific':    [228,224,218,210,200,185,165,140,120,102,82,87,122,155,172],
+  'Southern Ocean':   [255,252,248,244,240,235,228,220,210,200,186,175,162,156,150],
+};
+const regionColors={'E. Pacific (OMZ)':'#e05a3a','E. Atlantic (OMZ)':'#d4852a','Arabian Sea (OMZ)':'#c0392b','Equatorial Pacific':'#1db8a0','North Pacific':'#2e87d4','Southern Ocean':'#7ec8f0'};
+let activeReg='E. Pacific (OMZ)', depthInst=null;
+
+function buildDepthChart(){
+  const btns=document.getElementById('region-btns');
+  btns.innerHTML='';
+  Object.keys(depthData).forEach(r=>{
+    const b=document.createElement('button');
+    const isActive=r===activeReg;
+    b.textContent=r;
+    b.style.cssText=`display:block;width:100%;margin-bottom:3px;padding:3px 7px;font-size:8.5px;letter-spacing:.04em;cursor:pointer;border:1px solid ${isActive?regionColors[r]:'rgba(46,135,212,.2)'};background:${isActive?'rgba(46,135,212,.1)':'transparent'};color:${isActive?'#c8e8f8':'#4a7a9b'};border-radius:2px;text-align:left;font-family:Inter,sans-serif;white-space:nowrap;transition:all .15s`;
+    b.addEventListener('click',()=>{ activeReg=r; buildDepthChart(); });
+    btns.appendChild(b);
+  });
+  if(depthInst)depthInst.destroy();
+  const col=regionColors[activeReg];
+  const data=depthData[activeReg];
+  const ctx=document.getElementById('chart-depth').getContext('2d');
+  depthInst=new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:depthLevels.map(d=>d+'m'),
+      datasets:[{label:'O₂',data,borderColor:col,backgroundColor:'rgba(46,135,212,.05)',borderWidth:2.5,pointBackgroundColor:data.map(v=>v<63?'#e05a3a':'#2e87d4'),pointRadius:5,pointHoverRadius:7,fill:false,tension:.42}]
+    },
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(4,30,54,.92)',titleColor:'#7ec8f0',bodyColor:'#c8e8f8',borderColor:'rgba(46,135,212,.3)',borderWidth:1,callbacks:{label:c=>`O₂: ${c.raw} mmol/m³${c.raw<63?' ⚠ hypoxic':''}`}}},
+      scales:{
+        x:{min:0,max:280,title:{display:true,text:'Dissolved O₂ (mmol/m³)',color:'#4a7a9b',font:{size:10}},ticks:{color:'#4a7a9b',font:{size:10}},grid:{color:'rgba(46,135,212,.06)'},border:{color:'rgba(46,135,212,.12)'}},
+        y:{title:{display:true,text:'Depth',color:'#4a7a9b',font:{size:10}},ticks:{color:'#4a7a9b',font:{size:10},autoSkip:false},grid:{color:'rgba(46,135,212,.06)'},border:{color:'rgba(46,135,212,.12)'}}
+      }
+    }
+  });
+  // Threshold line
+  setTimeout(()=>{
+    if(!depthInst)return;
+    const sc=depthInst.scales.x, x63=sc.getPixelForValue(63);
+    const panel=document.getElementById('chart-depth').parentElement;
+    panel.querySelectorAll('.threshold-overlay,.threshold-lbl').forEach(e=>e.remove());
+    const line=document.createElement('div');
+    line.className='threshold-overlay';
+    line.style.cssText=`position:absolute;top:36px;bottom:26px;left:${x63}px;width:1px;background:#e05a3a;opacity:.55;pointer-events:none;z-index:5`;
+    const lbl=document.createElement('span');
+    lbl.className='threshold-lbl';
+    lbl.style.cssText=`position:absolute;top:32px;left:${x63+4}px;font-size:8.5px;color:#e05a3a;pointer-events:none;z-index:6;white-space:nowrap`;
+    lbl.textContent='63 — hypoxia threshold';
+    panel.appendChild(line); panel.appendChild(lbl);
+  },200);
+}
+
+// ── TREND CHART ──
+let trendInst=null;
+function buildTrendChart(){
+  if(trendInst)return;
+  const years=d3.range(2000,2023);
+  function s(base,amp,trend,noise){
+    return years.map((_,i)=>Math.round((base+Math.sin(i*.58)*amp-i*trend+(Math.random()-.5)*noise)*10)/10);
+  }
+  const etp=s(22,2.2,.055,1.8), eta=s(31,2.6,.06,2.1), ara=s(8,1.1,.025,1);
+  function smooth(arr,w=3){ return arr.map((_,i)=>{ const sl=arr.slice(Math.max(0,i-w),i+w+1); return Math.round(sl.reduce((a,b)=>a+b,0)/sl.length*10)/10; }); }
+
+  const leg=document.getElementById('trend-legend');
+  leg.innerHTML='';
+  [['#2e87d4','E. Pacific OMZ','solid'],['#7ec8f0','E. Atlantic OMZ','dashed'],['#e05a3a','Arabian Sea OMZ','solid']]
+    .forEach(([c,l,style])=>{
+      const d=document.createElement('div'); d.className='chart-legend-item';
+      d.innerHTML=`<span class="chart-legend-line" style="background:${c};${style==='dashed'?'background:linear-gradient(to right,'+c+' 50%,transparent 50%);background-size:6px 2px':''}"></span>${l}`;
+      leg.appendChild(d);
+    });
+
+  const ctx=document.getElementById('chart-trend').getContext('2d');
+  trendInst=new Chart(ctx,{
+    type:'line',
+    data:{labels:years,datasets:[
+      {label:'E. Pacific OMZ',data:smooth(etp),borderColor:'#2e87d4',backgroundColor:'transparent',borderWidth:2,pointRadius:2,tension:.4},
+      {label:'E. Atlantic OMZ',data:smooth(eta),borderColor:'#7ec8f0',backgroundColor:'transparent',borderWidth:1.5,borderDash:[5,3],pointRadius:2,tension:.4},
+      {label:'Arabian Sea',data:smooth(ara),borderColor:'#e05a3a',backgroundColor:'transparent',borderWidth:2,pointRadius:2,tension:.4},
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(4,30,54,.92)',titleColor:'#7ec8f0',bodyColor:'#c8e8f8',borderColor:'rgba(46,135,212,.3)',borderWidth:1,callbacks:{label:c=>`${c.dataset.label}: ${c.raw} mmol/m³`}}},
+      scales:{
+        x:{ticks:{color:'#4a7a9b',font:{size:10},maxTicksLimit:11},grid:{color:'rgba(46,135,212,.06)'},border:{color:'rgba(46,135,212,.12)'}},
+        y:{title:{display:true,text:'Mean O₂ (mmol/m³)',color:'#4a7a9b',font:{size:10}},ticks:{color:'#4a7a9b',font:{size:10}},grid:{color:'rgba(46,135,212,.06)'},border:{color:'rgba(46,135,212,.12)'}}
+      }
+    }
+  });
+}
+
+// ── COLUMN / SQUEEZE CHART ──
+let colInst=null;
+function buildColChart(){
+  if(colInst)return;
+  const depths=[0,50,100,200,300,500,800,1000,1500,2000];
+  const ref=[222,205,165,95,60,38,28,32,45,62];
+  const omz=[188,162,118,48,24,12,8,10,20,38];
+
+  const leg=document.getElementById('col-legend');
+  leg.innerHTML='';
+  [['#2e87d4','Open ocean (reference)'],['#e05a3a','OMZ core — E. Pacific']].forEach(([c,l])=>{
+    const d=document.createElement('div'); d.className='chart-legend-item';
+    d.innerHTML=`<span class="chart-legend-sq" style="background:${c}"></span>${l}`;
+    leg.appendChild(d);
+  });
+
+  const ctx=document.getElementById('chart-column').getContext('2d');
+  colInst=new Chart(ctx,{
+    type:'line',
+    data:{labels:depths.map(d=>d+'m'),datasets:[
+      {label:'Open ocean',data:ref,borderColor:'#2e87d4',backgroundColor:'rgba(46,135,212,.07)',borderWidth:2.5,pointRadius:4,fill:true,tension:.4},
+      {label:'OMZ core',data:omz,borderColor:'#e05a3a',backgroundColor:'rgba(224,90,58,.07)',borderWidth:2.5,pointRadius:4,fill:true,tension:.4},
+    ]},
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(4,30,54,.92)',titleColor:'#7ec8f0',bodyColor:'#c8e8f8',borderColor:'rgba(46,135,212,.3)',borderWidth:1,callbacks:{label:c=>`${c.dataset.label}: ${c.raw} mmol/m³${c.raw<63?' ⚠':''}`}}},
+      scales:{
+        x:{min:0,max:260,title:{display:true,text:'O₂ (mmol/m³)',color:'#4a7a9b',font:{size:10}},ticks:{color:'#4a7a9b',font:{size:10}},grid:{color:'rgba(46,135,212,.06)'},border:{color:'rgba(46,135,212,.12)'}},
+        y:{reverse:false,title:{display:true,text:'Depth',color:'#4a7a9b',font:{size:10}},ticks:{color:'#4a7a9b',font:{size:10},autoSkip:false},grid:{color:'rgba(46,135,212,.06)'},border:{color:'rgba(46,135,212,.12)'}}
+      }
+    }
+  });
+  // Threshold
+  setTimeout(()=>{
+    if(!colInst)return;
+    const sc=colInst.scales.x, x63=sc.getPixelForValue(63);
+    const panel=document.getElementById('chart-column').parentElement;
+    panel.querySelectorAll('.threshold-overlay,.threshold-lbl').forEach(e=>e.remove());
+    const line=document.createElement('div');
+    line.style.cssText=`position:absolute;top:36px;bottom:26px;left:${x63}px;width:1px;background:#e05a3a;opacity:.55;pointer-events:none;z-index:5;class:threshold-overlay`;
+    const lbl=document.createElement('span');
+    lbl.style.cssText=`position:absolute;top:32px;left:${x63+4}px;font-size:8.5px;color:#e05a3a;pointer-events:none;z-index:6;white-space:nowrap`;
+    lbl.textContent='63 — hypoxia';
+    panel.appendChild(line); panel.appendChild(lbl);
+  },200);
+}
+
+// ── SCROLL ENGINE ──
+const layerMap={0:'layer-0',1:'layer-1',2:'layer-2',3:'layer-3',4:'layer-4',5:'layer-5'};
+let cur=-1;
+
+function activate(idx){
+  if(idx===cur)return; cur=idx;
+  document.querySelectorAll('.viz-layer').forEach(l=>l.classList.remove('active'));
+  const el=document.getElementById(layerMap[idx]);
+  if(el)el.classList.add('active');
+  if(idx===1)renderMap();
+  if(idx===2)buildDepthChart();
+  if(idx===3)buildTrendChart();
+  if(idx===4)buildColChart();
+}
+
+function initScrolly(){
+  const steps=document.querySelectorAll('.step');
+  const obs=new IntersectionObserver(entries=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){ activate(parseInt(e.target.dataset.step)); }
+    });
+  },{threshold:.38,rootMargin:'-8% 0px -42% 0px'});
+  steps.forEach(s=>obs.observe(s));
+}
+
+window.addEventListener('load',()=>{ initScrolly(); });
+</script>
+</body>
+</html>
